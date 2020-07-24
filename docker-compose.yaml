@@ -10,7 +10,8 @@ services:
       - QUEUE_USER=${OPENSAFELY_QUEUE_USER}
       - QUEUE_PASS=${OPENSAFELY_QUEUE_PASS}
       # A location where outputs should be stored
-      - OPENSAFELY_RUNNER_STORAGE_BASE=${OPENSAFELY_RUNNER_STORAGE_BASE}
+      - HIGH_PRIVACY_STORAGE_BASE=${OPENSAFELY_HIGH_PRIVACY_STORAGE_BASE}
+      - MEDIUM_PRIVACY_STORAGE_BASE=${OPENSAFELY_MEDIUM_PRIVACY_STORAGE_BASE}
       # A Github developer access key which can read private repos
       - PRIVATE_REPO_ACCESS_TOKEN=${OPENSAFELY_PRIVATE_REPO_ACCESS_TOKEN}
       # Database URLs
@@ -19,8 +20,11 @@ services:
       - DUMMY_DATABASE_URL=${OPENSAFELY_DUMMY_DATABASE_URL}
     volumes:
       - type: bind
-        source: ${OPENSAFELY_RUNNER_STORAGE_BASE}
-        target: ${OPENSAFELY_RUNNER_STORAGE_BASE}
+        source: ${OPENSAFELY_MEDIUM_PRIVACY_STORAGE_BASE}
+        target: ${OPENSAFELY_MEDIUM_PRIVACY_STORAGE_BASE}
+      - type: bind
+        source: ${OPENSAFELY_HIGH_PRIVACY_STORAGE_BASE}
+        target: ${OPENSAFELY_HIGH_PRIVACY_STORAGE_BASE}
       - type: bind
         source: //var/run/docker.sock
         target: /var/run/docker.sock

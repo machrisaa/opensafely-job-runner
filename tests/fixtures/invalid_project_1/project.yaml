@@ -1,0 +1,15 @@
+# This project contains two actions with the same run, which is invalid
+version: '1.0'
+
+actions:
+
+  run_model_1:
+    run: cohortextractor
+    outputs:
+      cohort: input.csv
+
+  run_model_2:
+    run: cohortextractor
+    needs: [run_model_1]
+    outputs:
+      log: model.log
