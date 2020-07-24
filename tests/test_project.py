@@ -4,9 +4,9 @@ import tempfile
 
 import pytest
 
-from runner.actions import make_container_name
-from runner.actions import make_volume_name
-from runner.actions import parse_project_yaml
+from runner.project import make_container_name
+from runner.project import make_volume_name
+from runner.project import parse_project_yaml
 from runner.exceptions import DependencyNotFinished
 from runner.exceptions import DuplicateRunInProjectFile
 from runner.exceptions import InvalidRunInProjectFile
@@ -81,7 +81,7 @@ def test_project_dependency_exception(mock_env):
     )
 
 
-@patch("runner.actions.make_path")
+@patch("runner.project.make_path")
 def test_project_dependency_no_exception(dummy_output_path, mock_env):
     """Do complete dependencies not raise an exception?
 
@@ -184,7 +184,7 @@ def test_valid_run_in_project(mock_env):
     ]
 
 
-@patch("runner.actions.make_path")
+@patch("runner.project.make_path")
 def test_project_output_missing_raises_exception(dummy_output_path, mock_env):
     """Do user-supplied variables that reference non-existent outputs
     raise an exception?
@@ -206,7 +206,7 @@ def test_project_output_missing_raises_exception(dummy_output_path, mock_env):
             parse_project_yaml(project_path, job)
 
 
-@patch("runner.actions.make_path")
+@patch("runner.project.make_path")
 def test_bad_variable_path_raises_exception(dummy_output_path, mock_env):
     """Do complete dependencies not raise an exception?
 

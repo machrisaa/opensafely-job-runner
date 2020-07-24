@@ -9,7 +9,7 @@ from pathlib import Path
 
 from runner.exceptions import GitCloneError
 from runner.exceptions import RepoNotFound
-from runner.actions import parse_project_yaml
+from runner.project import parse_project_yaml
 from runner.utils import getlogger
 from runner.utils import set_auth
 
