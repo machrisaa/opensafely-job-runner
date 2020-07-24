@@ -1,10 +1,10 @@
 from unittest.mock import patch
 import requests_mock
-import runner
 import time
 
 from runner.exceptions import OpenSafelyError
 from runner.exceptions import RepoNotFound
+from runner.main import watch
 
 import pytest
 
@@ -73,7 +73,7 @@ def test_watch_broken_job(mock_env):
     with requests_mock.Mocker() as m:
         m.get("/jobs/", json=test_job_list())
         adapter = m.patch("/jobs/0/")
-        runner.watch("http://test.com/jobs/", loop=False, jobrunner=BrokenJobRunner)
+        watch("http://test.com/jobs/", loop=False, jobrunner=BrokenJobRunner)
         assert adapter.request_history[0].json() == {"started": True}
         assert adapter.request_history[1].json() == {
             "status_code": 99,
@@ -85,7 +85,7 @@ def test_watch_working_job(mock_env):
     with requests_mock.Mocker() as m:
         m.get("/jobs/", json=test_job_list())
         adapter = m.patch("/jobs/0/")
-        runner.watch("http://test.com/jobs/", loop=False, jobrunner=WorkingJobRunner)
+        watch("http://test.com/jobs/", loop=False, jobrunner=WorkingJobRunner)
         assert adapter.request_history[0].json() == {"started": True}
         assert adapter.request_history[1].json() == {
             "output_path": "output_path",
@@ -93,12 +93,12 @@ def test_watch_working_job(mock_env):
         }
 
 
-@patch("runner.HOUR", 0.001)
+@patch("runner.main.HOUR", 0.001)
 def test_watch_timeout_job(mock_env):
     with requests_mock.Mocker() as m:
         m.get("/jobs/", json=test_job_list())
         adapter = m.patch("/jobs/0/")
-        runner.watch("http://test.com/jobs/", loop=False, jobrunner=SlowJobRunner)
+        watch("http://test.com/jobs/", loop=False, jobrunner=SlowJobRunner)
         assert adapter.request_history[0].json()["started"] is True
         assert adapter.request_history[1].json() == {
             "status_code": -1,

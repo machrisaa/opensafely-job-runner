@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from runner import watch
+from runner.main import watch
 
 
 if __name__ == "__main__":
