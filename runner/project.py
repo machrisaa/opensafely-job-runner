@@ -184,7 +184,7 @@ def add_runtime_metadata(action, repo=None, db=None, tag=None, **kwargs):
     permitted, and return how it should be invoked for `docker run`
 
     Adds docker_invocation, docker_exception, privacy_level,
-    database_url, and output_path to the `action` dict.
+    database_url, container_name, and output_path to the `action` dict.
 
     """
     action = copy.deepcopy(action)
@@ -215,6 +215,8 @@ def add_runtime_metadata(action, repo=None, db=None, tag=None, **kwargs):
     action["output_path"] = make_path(
         repo=repo, tag=tag, db=db, privacy_level=info["output_privacy_level"]
     )
+    action["container_name"] = make_container_name(action["output_path"])
+
     if info["input_privacy_level"]:
         extra_mounts.extend(["--volume", "{input_path}:{input_path}"])
         action["input_path"] = make_path(
@@ -275,7 +277,6 @@ def parse_project_yaml(workdir, job):
     job_action["docker_invocation"] = interpolate_variables(
         job_action["docker_invocation"], dependency_actions
     )
-    job_action["container_name"] = make_container_name(job_action["output_path"])
     job.update(job_action)
     return job
 
