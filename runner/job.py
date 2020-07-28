@@ -40,7 +40,17 @@ class JobRunner:
         self.logger.info(f"Repo at {self.workdir} successfully validated")
         self.job = parse_project_yaml(self.workdir, self.job)
         self.logger.debug(f"Added runtime metadata to job")
-        self.invoke_docker()
+        needs_run = False
+        for output_name, output_filename in self.job.get("outputs", {}).items():
+            expected_path = os.path.join(self.job["output_path"], output_filename)
+            if not os.path.exists(expected_path):
+                needs_run = True
+                break
+        if needs_run:
+            self.invoke_docker()
+            self.job["status_message"] = "Fresh output generated"
+        else:
+            self.job["status_message"] = "Output already generated"
         return self.job
 
     def validate_input_files(self):

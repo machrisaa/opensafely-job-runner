@@ -19,6 +19,10 @@ def getlogger(name):
     return logger
 
 
+def get_auth():
+    return (os.environ["QUEUE_USER"], os.environ["QUEUE_PASS"])
+
+
 def set_auth():
     """Set HTTP auth (used by `requests`)
     """

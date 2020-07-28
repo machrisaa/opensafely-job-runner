@@ -1,21 +1,33 @@
 import copy
+import logging
 import networkx as nx
 import os
 import re
+import requests
 import shlex
+import subprocess
 import yaml
 
 from pathlib import Path
 from urllib.parse import urlparse
 
 from runner.exceptions import CohortExtractorError
-from runner.exceptions import DependencyNotFinished
+from runner.exceptions import DependencyFailed
+from runner.exceptions import DependencyRunning
 from runner.exceptions import DuplicateRunInProjectFile
 from runner.exceptions import InvalidRunInProjectFile
 from runner.exceptions import InvalidVariableInProjectFile
 from runner.exceptions import OpenSafelyError
 from runner.exceptions import OperationNotInProjectFile
 from runner.exceptions import ScriptError
+from runner.utils import getlogger
+from runner.utils import get_auth
+
+
+logger = getlogger(__name__)
+baselogger = logging.LoggerAdapter(logger, {"job_id": "-"})
+
+JOB_SERVER_ENDPOINT = os.environ["JOB_SERVER_ENDPOINT"]
 
 # These numbers correspond to "levels" as described in our security
 # documentation
@@ -57,16 +69,103 @@ def make_volume_name(repo, branch_or_tag, db_flavour):
     return repo_name + "-" + branch_or_tag + "-" + db_flavour
 
 
+def get_latest_matching_job_from_queue(
+    repo=None, db=None, tag=None, action_id=None, **kw
+):
+    job = {
+        "backend": os.environ["BACKEND"],
+        "repo": repo,
+        "db": db,
+        "tag": tag,
+        "operation": action_id,
+        "limit": 1,
+    }
+    response = requests.get(JOB_SERVER_ENDPOINT, params=job)
+    response.raise_for_status()
+    results = response.json()["results"]
+    return results[0] if results else None
+
+
+def push_dependency_job_from_action_to_queue(action):
+    job = {
+        "backend": os.environ["BACKEND"],
+        "repo": action["repo"],
+        "db": action["db"],
+        "tag": action["tag"],
+        "operation": action["action_id"],
+    }
+    job["callback_url"] = action["callback_url"]
+    job["needed_by"] = action["needed_by"]
+    response = requests.post(JOB_SERVER_ENDPOINT, json=job, auth=get_auth())
+    response.raise_for_status()
+    return response
+
+
+def docker_container_exists(container_name):
+    cmd = [
+        "docker",
+        "ps",
+        "--filter",
+        f"name={container_name}",
+        "--quiet",
+    ]
+    result = subprocess.run(cmd, capture_output=True, encoding="utf8")
+    return result.stdout != ""
+
+
 def raise_if_unfinished(action):
     """Does the target output file for this job exist?  If not, raise an
-    exception.
+    exception to prevent this action from starting.
+    `DependencyRunning` exceptions have special handling in the main
+    loop so the job can be retried
 
     """
     for output_name, output_filename in action.get("outputs", {}).items():
         expected_path = os.path.join(action["output_path"], output_filename)
         if not os.path.exists(expected_path):
-            msg = f"No output for {action['action_id']} at {expected_path}"
-            raise DependencyNotFinished(msg, report_args=True)
+            if docker_container_exists(action["container_name"]):
+                raise DependencyRunning(
+                    f"Not started because dependency `{action['action_id']}` is currently running (as {action['container_name']})",
+                    report_args=True,
+                )
+            else:
+                dependency_status = get_latest_matching_job_from_queue(**action)
+                baselogger.warning(
+                    "Got job %s from queue to match %s",
+                    dependency_status,
+                    action["action_id"],
+                    dependency_status,
+                )
+                if dependency_status:
+                    if dependency_status["completed_at"]:
+                        if dependency_status["status_code"] == 0:
+                            new_job = push_dependency_job_from_action_to_queue(action)
+                            raise DependencyRunning(
+                                f"Not started because dependency `{action['action_id']}` has been added to the job queue at {new_job['url']} as its previous output can no longer be found",
+                                report_args=True,
+                            )
+                        else:
+                            raise DependencyFailed(
+                                f"Dependency `{action['action_id']}` failed, so unable to run this operation",
+                                report_args=True,
+                            )
+
+                    elif dependency_status["started"]:
+                        raise DependencyRunning(
+                            f"Not started because dependency `{action['action_id']}` is just about to start",
+                            report_args=True,
+                        )
+                    else:
+                        raise DependencyRunning(
+                            f"Not started because dependency `{action['action_id']}` is waiting to start",
+                            report_args=True,
+                        )
+                # To reach this point, the job has never been run
+                push_dependency_job_from_action_to_queue(action)
+                raise DependencyRunning(
+                    f"Not started because dependency `{action['action_id']}` has been added to the job queue",
+                    report_args=True,
+                )
 
 
 def escape_braces(unescaped_string):
@@ -179,7 +278,9 @@ def split_and_format_run_command(run_command):
     return run_token, version, parts[1:]
 
 
-def add_runtime_metadata(action, repo=None, db=None, tag=None, **kwargs):
+def add_runtime_metadata(
+    action, repo=None, db=None, tag=None, callback_url=None, operation=None, **kwargs
+):
     """Given a run command specified in project.yaml, validate that it is
     permitted, and return how it should be invoked for `docker run`
 
@@ -229,6 +330,11 @@ def add_runtime_metadata(action, repo=None, db=None, tag=None, **kwargs):
     docker_invocation = docker_invocation + args
 
     action["docker_invocation"] = [arg.format(**action) for arg in docker_invocation]
+    action["callback_url"] = callback_url
+    action["repo"] = repo
+    action["db"] = db
+    action["tag"] = tag
+    action["needed_by"] = operation
     return action
 
 

@@ -1,10 +1,13 @@
 from unittest.mock import patch
 import requests_mock
-import time
 
 from runner.exceptions import OpenSafelyError
 from runner.exceptions import RepoNotFound
 from runner.main import watch
+from tests.common import test_job_list
+from tests.common import BrokenJobRunner
+from tests.common import SlowJobRunner
+from tests.common import WorkingJobRunner
 
 import pytest
 
@@ -18,55 +21,6 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("BACKEND", "tpp")
     monkeypatch.setenv("HIGH_PRIVACY_STORAGE_BASE", "/tmp/storage/highsecurity")
     monkeypatch.setenv("MEDIUM_PRIVACY_STORAGE_BASE", "/tmp/storage/mediumsecurity")
-
-
-default_job = {
-    "url": "http://test.com/jobs/0/",
-    "repo": "myrepo",
-    "tag": "mytag",
-    "backend": "tpp",
-    "db": "full",
-    "started": False,
-    "operation": "generate_cohort",
-    "status_code": None,
-    "output_path": "output_path",
-    "created_at": None,
-    "started_at": None,
-    "completed_at": None,
-}
-
-
-class TestJobRunner:
-    def __init__(self, job):
-        self.job = job
-
-    def __repr__(self):
-        return self.__class__.__name__
-
-
-class WorkingJobRunner(TestJobRunner):
-    def __call__(self):
-        return self.job
-
-
-class SlowJobRunner(TestJobRunner):
-    def __call__(self):
-        time.sleep(1)
-        return self.job
-
-
-class BrokenJobRunner(TestJobRunner):
-    def __call__(self):
-        raise KeyError
-
-
-def test_job_list():
-    return {
-        "count": 1,
-        "next": None,
-        "previous": None,
-        "results": [default_job],
-    }
 
 
 def test_watch_broken_job(mock_env):

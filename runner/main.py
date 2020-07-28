@@ -9,6 +9,8 @@ import time
 
 
 from runner.exceptions import OpenSafelyError
+from runner.exceptions import DependencyRunning
+from runner.utils import get_auth
 from runner.utils import getlogger
 from runner.job import JobRunner
 
@@ -32,10 +34,14 @@ def report_result(future):
         )  # blocks until results are ready
         requests.patch(
             job["url"],
-            json={"status_code": 0, "output_path": job["output_path"]},
+            json={
+                "status_code": 0,
+                "output_url": job["output_path"],
+                "status_message": job["status_message"],
+            },
             auth=get_auth(),
         )
-        joblogger.info("Reported success to job server")
+        joblogger.info(f"Reported success to job server ({job['status_message']})")
     except TimeoutError as error:
         requests.patch(
             job["url"],
@@ -49,6 +55,22 @@ def report_result(future):
         # Remove pebble's RemoteTraceback exception from reporting
         error.__cause__ = None
         joblogger.exception(error)
+    except DependencyRunning as error:
+        requests.patch(
+            job["url"],
+            json={
+                "status_code": error.status_code,
+                "started": False,
+                "status_message": f"{error.safe_details()} {id_message}",
+            },
+            auth=get_auth(),
+        )
+        joblogger.info(
+            "Reported error %s (%s %s) to job server, and reset the started flag",
+            error.status_code,
+            error,
+            id_message,
+        )
     except OpenSafelyError as error:
         requests.patch(
             job["url"],
@@ -82,10 +104,6 @@ def report_result(future):
         joblogger.exception(error)
 
 
-def get_auth():
-    return (os.environ["QUEUE_USER"], os.environ["QUEUE_PASS"])
-
-
 def watch(queue_endpoint, loop=True, jobrunner=None):
     baselogger.info(f"Started watching {queue_endpoint}")
     session = requests.Session()
@@ -104,7 +122,7 @@ def watch(queue_endpoint, loop=True, jobrunner=None):
                     params={
                         "started": False,
                         "backend": os.environ["BACKEND"],
-                        "page_size": 100,
+                        "page_size": 1,
                     },
                     auth=get_auth(),
                 )

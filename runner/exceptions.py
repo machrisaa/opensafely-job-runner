@@ -19,7 +19,7 @@ class OpenSafelyError(Exception):
     def safe_details(self):
         classname = type(self).__name__
         if self.report_args:
-            return classname + ": " + " ".join(self.args)
+            return classname + ": " + str(self.args)
         else:
             return classname + ": [possibly-unsafe details redacted]"
 
@@ -70,3 +70,11 @@ class InvalidRunInProjectFile(OpenSafelyError):
 
 class InvalidVariableInProjectFile(OpenSafelyError):
     status_code = 12
+
+
+class DependencyFailed(DependencyNotFinished):
+    status_code = 13
+
+
+class DependencyRunning(DependencyNotFinished):
+    status_code = 14

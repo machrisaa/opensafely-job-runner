@@ -1,9 +1,12 @@
 from unittest.mock import patch
 import os
+import subprocess
 import tempfile
 
 import pytest
+import requests_mock
 
+from runner.project import docker_container_exists
 from runner.project import make_container_name
 from runner.project import make_volume_name
 from runner.project import parse_project_yaml
@@ -12,6 +15,7 @@ from runner.exceptions import DuplicateRunInProjectFile
 from runner.exceptions import InvalidRunInProjectFile
 from runner.exceptions import InvalidVariableInProjectFile
 from runner.exceptions import OperationNotInProjectFile
+from tests.common import test_job_list
 
 
 @pytest.fixture(scope="function")
@@ -61,8 +65,9 @@ def test_job_to_project_nodeps(mock_env):
     assert project["outputs"]["cohort"] == "input.csv"
 
 
-def test_project_dependency_exception(mock_env):
-    """Do incomplete dependencies raise an exception?
+def test_never_started_dependency_exception(mock_env):
+    """Does a never-run dependency mean an exception is raised and the
+    dependency is kicked off?
 
     """
     project_path = "tests/fixtures/simple_project_1"
@@ -73,11 +78,96 @@ def test_project_dependency_exception(mock_env):
         "tag": "master",
         "workdir": "/workspace",
     }
-    with pytest.raises(DependencyNotFinished) as e:
-        parse_project_yaml(project_path, job)
+    with requests_mock.Mocker() as m:
+        m.get("/jobs/", json={"results": []})
+        adapter = m.post("/jobs/")
+        with pytest.raises(DependencyNotFinished) as e:
+            parse_project_yaml(project_path, job)
     assert (
         e.value.args[0]
-        == "No output for generate_cohorts at /tmp/storage/highsecurity/repo-master-full/input.csv"
+        == "Not started: dependency `generate_cohorts` has been added to the job queue"
+    )
+    assert adapter.request_history[0].json() == {
+        "backend": "tpp",
+        "callback_url": None,
+        "db": "full",
+        "needed_by": "run_model",
+        "operation": "generate_cohorts",
+        "repo": "https://github.com/repo",
+        "tag": "master",
+    }
+
+
+def test_unstarted_dependency_exception(mock_env):
+    """Does a existing, but unstarted dependency mean an exception is raised?
+
+    """
+    project_path = "tests/fixtures/simple_project_1"
+    job = {
+        "operation": "run_model",
+        "repo": "https://github.com/repo",
+        "db": "full",
+        "tag": "master",
+        "workdir": "/workspace",
+    }
+    existing_unstarted_job = job.copy()
+    existing_unstarted_job["started"] = False
+    with requests_mock.Mocker() as m:
+        m.get("/jobs/", json=test_job_list(job=existing_unstarted_job))
+        with pytest.raises(DependencyNotFinished) as e:
+            parse_project_yaml(project_path, job)
+    assert (
+        e.value.args[0]
+        == "Not started: dependency `generate_cohorts` is scheduled to start"
+    )
+
+
+def test_failed_dependency_exception(mock_env):
+    """Does a existing, but failed dependency mean an exception is raised?
+
+    """
+    project_path = "tests/fixtures/simple_project_1"
+    job = {
+        "operation": "run_model",
+        "repo": "https://github.com/repo",
+        "db": "full",
+        "tag": "master",
+        "workdir": "/workspace",
+    }
+    existing_unstarted_job = job.copy()
+    existing_unstarted_job["started"] = True
+    existing_unstarted_job["status_code"] = 1
+    with requests_mock.Mocker() as m:
+        m.get("/jobs/", json=test_job_list(job=existing_unstarted_job))
+        with pytest.raises(DependencyNotFinished) as e:
+            parse_project_yaml(project_path, job)
+    assert (
+        e.value.args[0]
+        == "Dependency `generate_cohorts` failed, so unable to run this operation"
+    )
+
+
+@patch("runner.project.docker_container_exists")
+def test_started_dependency_exception(mock_container_exists, mock_env):
+    """Does an already-running dependency mean an exception is raised?
+
+    """
+    project_path = "tests/fixtures/simple_project_1"
+    job = {
+        "operation": "run_model",
+        "repo": "https://github.com/repo",
+        "db": "full",
+        "tag": "master",
+        "workdir": "/workspace",
+    }
+    with requests_mock.Mocker() as m:
+        m.get("/jobs/", json={"results": []})
+        mock_container_exists.return_value = True
+        with pytest.raises(DependencyNotFinished) as e:
+            parse_project_yaml(project_path, job)
+    assert (
+        e.value.args[0]
+        == "Not started: dependency `generate_cohorts` is currently running (as tmp-storage-highsecurity-repo-master-full)"
     )
 
 
@@ -225,3 +315,21 @@ def test_bad_variable_path_raises_exception(dummy_output_path, mock_env):
             f.write("")
         with pytest.raises(InvalidVariableInProjectFile):
             parse_project_yaml(project_path, job)
+
+
+def test_job_runner_docker_container_exists(mock_env):
+    """Tests the ability to see if a container is running or not.
+
+    This test is slow: it depends on a docker install and network
+    access, and the teardown in the last line blocks for a few seconds
+
+    """
+    assert not docker_container_exists("nonexistent_container_name")
+
+    # Start a trivial docker container
+    name = "existent_container_name"
+    subprocess.check_call(
+        ["docker", "run", "--detach", "--rm", "--name", name, "alpine", "sleep", "60"],
+    )
+    assert docker_container_exists(name)
+    subprocess.check_call(["docker", "stop", name])
