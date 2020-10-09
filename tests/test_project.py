@@ -169,3 +169,13 @@ def test_invalid_output_file_raises_exception():
     project_path = "tests/fixtures/invalid_project_6"
     with pytest.raises(ProjectValidationError, match="is not permitted"):
         load_and_validate_project(project_path)
+
+
+def test_duplicate_output_file_raises_exception():
+    """Do jobs whose action_id is duplicated in a project raise an
+    exception?
+
+    """
+    project_path = "tests/fixtures/invalid_project_7"
+    with pytest.raises(ProjectValidationError, match="is not unique"):
+        load_and_validate_project(project_path)
