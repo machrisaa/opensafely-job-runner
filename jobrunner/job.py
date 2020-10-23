@@ -123,10 +123,11 @@ def volume_from_filespec(input_file_spec):
     try:
         yield volume_name, volume_container_name
     finally:
-        cmd = ["docker", "stop", volume_container_name]
-        subprocess.check_call(cmd)
-        cmd = ["docker", "volume", "rm", volume_name]
-        subprocess.check_call(cmd)
+        if "NO_DOCKER_CLEANUP" not in os.environ:
+            cmd = ["docker", "stop", volume_container_name]
+            subprocess.check_call(cmd)
+            cmd = ["docker", "volume", "rm", volume_name]
+            subprocess.check_call(cmd)
 
 
 def copy_from_container(container_name, file_copy_spec):
