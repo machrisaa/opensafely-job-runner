@@ -272,10 +272,6 @@ class Job:
         container; and copy its outputs back into persistent storage
         """
 
-        # Copy expected input files into workdir, expanding shell globs
-        self.logger.debug(
-            "Copying %s inputs to %s", prepared_job["inputs"], self.workdir
-        )
         # This initial filespec entry will copy the study repo to the root. It's
         # important this happens before input files are copied in, so it doesn't
         # overwrite any important data
@@ -283,7 +279,11 @@ class Job:
         # Now add all the other inputs from the job
         input_filespec.extend(get_input_filespec_from_job(prepared_job))
         with volume_from_filespec(input_filespec) as volume_info:
+            # Copy expected input files into workdir, expanding shell globs
             volume_name, volume_container_name = volume_info
+            self.logger.debug(
+                "Copying %s inputs to %s", prepared_job["inputs"], volume_name
+            )
             try:
                 run_cmd = [
                     "docker",
