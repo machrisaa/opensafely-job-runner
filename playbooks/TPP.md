@@ -2,49 +2,58 @@
 
 Use git-bash as your terminal
 
-Service location: /e/job-runner
+Service location: /e/job-runner. All commands below assume that is your current directory.
+
+nssm is located in /c/nssm-2.24/win64/. You want to add that to your PATH with:
+
+    setx PATH "C:\nssm-2.24\win64"
+
+You will need to start a new git-bash shell to see this change.
 
 ## Operations
 
-### Windows Service
+### Configuration
 
-#### Starting/stopping the service
+The configuration is via environment variables in .env.  The service is
+configured to run the `scripts/run.sh script`, which sources .env and then
+execs into python.
 
-    /c/nssm-2.4/win64/nssm stop opensafely
-    /c/nssm-2.4/win64/nssm start opensafely
-    /c/nssm-2.4/win64/nssm status opensafely
+### Starting/stopping the service
 
-Note: start command gives spurious warning, ignore.
+    nssm stop opensafely
+    nssm start opensafely
+    nssm status opensafely
+
+Note: start command gives spurious warning due to bash/python being slow to
+start up, ignore.
 
 To view issues with starting/stopping the windows service, the following will
 launch Windows Event Viewer directly pointing at the nssm events.
 
     /e/bin/events.sh
 
-#### Viewing job-runner logs
+### Viewing job-runner logs
 
-stdout is in /e/job-runner/service.log
 stderr is in /e/job-runner/service.err.log
+stdout is in /e/job-runner/service.log (not currently used)
 
 These files are rotated by nssm.
 
 TODO: combine these into one log?
 
-### Generic operations
-
-#### Update docker image
+### Update a docker image for stata-mp/R/python/jupyter actions
 
     ./scripts/update-docker-image.sh image[:tag]
 
-#### Update the job-runner itself
+### Update the job-runner itself
 
-    ./scripts/update-docker-image.sh job-runner
+    git pull
+    nssm stop opensafely
+    nssm start opensafely
 
-And restart.
+### View specific job logs
 
-#### View specific job logs
-
-    /e/bin/watch-job-logs.sh
+    ./scripts/watch-job-logs.sh
 
 This will let you choose a job's output to tail.
 
@@ -65,7 +74,7 @@ When this happens the job's container and volume are not
 automatically cleaned up and so it's possible to retry the job without
 having to start from scratch. You can run this with:
 
-    bash scripts/run.sh -m jobrunner.retry_job <job_id>
+    .scripts/run.sh -m jobrunner.retry_job <job_id>
 
 The `job_id` actually only has to be a sub-string of the job ID (full
 ones are a bit awkward to type) and you will be able to select the
@@ -77,7 +86,7 @@ correct job if there are multiple matches.
 To kill a running job (or prevent it starting if it hasn't yet) use the
 `kill_job` command:
 
-    bash scripts/run.sh -m jobrunner.kill_job --cleanup <job_id> [... <job_id>]
+    ./scripts/run.sh -m jobrunner.kill_job --cleanup <job_id> [... <job_id>]
 
 The `job_id` actually only has to be a sub-string of the job ID (full
 ones are a bit awkward to type) and you wil be able to select the
