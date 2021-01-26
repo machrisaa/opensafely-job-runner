@@ -285,7 +285,8 @@ def finalise_job(job):
             medium_privacy_dir / METADATA_DIR / f"{job.action}.log",
         )
         for filename, privacy_level in job.outputs.items():
-            if privacy_level == "moderately_sensitive":
+            _, ext = os.path.splitext(filename)
+            if privacy_level == "moderately_sensitive" and ext in config.ALLOWLIST_EXTENSIONS:
                 copy_file(workspace_dir / filename, medium_privacy_dir / filename)
         delete_files(medium_privacy_dir, files_to_remove)
         write_manifest_file(medium_privacy_dir, manifest)

@@ -64,3 +64,19 @@ STATA_LICENSE_REPO = os.environ.get(
     "STATA_LICENCE_REPO",
     "https://github.com/opensafely/server-instructions.git",
 )
+
+# allowed file extensions for medium_privacy outputs
+ALLOWLIST_EXTENSIONS = [
+    ".txt",
+    ".csv",
+    ".tsv",
+    ".log",
+    ".json",
+    ".svg",
+    ".png",
+    ".jpeg",
+    ".ipynb",
+    ".md",
+    ".html",
+    ".pdf",
+]
